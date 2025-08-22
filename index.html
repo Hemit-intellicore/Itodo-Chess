@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Airtel Chess App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #fff;
+      color: #222;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Top container for clocks */
+    .clocks {
+      display: flex;
+      justify-content: space-between;
+      width: 90%;
+      max-width: 600px;
+      margin: 10px 0;
+    }
+
+    .clock {
+      flex: 1;
+      margin: 0 5px;
+      padding: 10px;
+      background: #e60000;
+      color: #fff;
+      font-size: 1.5em;
+      font-weight: bold;
+      text-align: center;
+      border-radius: 12px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+      transition: background 0.3s, transform 0.2s;
+    }
+
+    .clock.active {
+      background: #ff1a1a;
+      transform: scale(1.05);
+    }
+
+    /* Captured pieces row */
+    .captured {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 8px;
+      min-height: 30px;
+      font-size: 1.5em;
+    }
+    .captured span {
+      margin: 0 3px;
+      opacity: 0.7;
+    }
+
+    /* Chessboard */
+    #board {
+      width: 90vw;
+      max-width: 600px;
+      aspect-ratio: 1;
+      border: 3px solid #e60000;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    /* Chat box */
+    #chat {
+      width: 90%;
+      max-width: 600px;
+      margin-top: 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    #chat-messages {
+      height: 100px;
+      overflow-y: auto;
+      padding: 8px;
+      font-size: 0.9em;
+    }
+    #chat-input {
+      border: none;
+      padding: 8px;
+      outline: none;
+    }
+
+    /* Control buttons */
+    .controls {
+      margin: 15px 0;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      background: #e60000;
+      border: none;
+      padding: 10px 16px;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+    button:hover {
+      background: #ff1a1a;
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css"/>
+</head>
+<body>
+
+  <!-- Clocks -->
+  <div class="clocks">
+    <div id="white-clock" class="clock">10:00</div>
+    <div id="black-clock" class="clock">10:00</div>
+  </div>
+
+  <!-- Captured pieces strips -->
+  <div class="captured" id="white-captured"></div>
+  <div id="board"></div>
+  <div class="captured" id="black-captured"></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button id="resetBtn">Reset</button>
+    <button id="exportBtn">Export PGN</button>
+  </div>
+
+  <!-- Chat -->
+  <div id="chat">
+    <div id="chat-messages"></div>
+    <input id="chat-input" placeholder="Type a message..."/>
+  </div>
+
+  <audio id="move-sound" src="https://freesound.org/data/previews/320/320181_5260877-lq.mp3"></audio>
+  <audio id="capture-sound" src="https://freesound.org/data/previews/266/266163_4278679-lq.mp3"></audio>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.12.0/chess.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
+  <script>
+    const boardEl = document.getElementById("board");
+    const moveSound = document.getElementById("move-sound");
+    const captureSound = document.getElementById("capture-sound");
+    const whiteClockEl = document.getElementById("white-clock");
+    const blackClockEl = document.getElementById("black-clock");
+    const whiteCapturedEl = document.getElementById("white-captured");
+    const blackCapturedEl = document.getElementById("black-captured");
+    const chatInput = document.getElementById("chat-input");
+    const chatMessages = document.getElementById("chat-messages");
+
+    let game = new Chess();
+    let board = Chessboard(boardEl, {
+      draggable: true,
+      position: "start",
+      onDrop: onDrop
+    });
+
+    // Clocks
+    let whiteTime = 600; // 10 minutes
+    let blackTime = 600;
+    let active = "w";
+    let timer;
+
+    function startClock() {
+      clearInterval(timer);
+      timer = setInterval(() => {
+        if (active === "w") {
+          whiteTime--;
+          if (whiteTime <= 0) endGame("Black wins on time");
+        } else {
+          blackTime--;
+          if (blackTime <= 0) endGame("White wins on time");
+        }
+        updateClocks();
+      }, 1000);
+    }
+
+    function updateClocks() {
+      whiteClockEl.textContent = formatTime(whiteTime);
+      blackClockEl.textContent = formatTime(blackTime);
+      whiteClockEl.classList.toggle("active", active === "w");
+      blackClockEl.classList.toggle("active", active === "b");
+    }
+
+    function formatTime(s) {
+      let m = Math.floor(s / 60);
+      let sec = (s % 60).toString().padStart(2, "0");
+      return `${m}:${sec}`;
+    }
+
+    // Captured pieces
+    let whiteCaptured = [];
+    let blackCaptured = [];
+
+    function onDrop(source, target) {
+      let move = game.move({ from: source, to: target, promotion: "q" });
+      if (!move) return "snapback";
+
+      if (move.captured) {
+        if (move.color === "w") {
+          whiteCaptured.push(move.captured);
+          blackCapturedEl.innerHTML = whiteCaptured.map(p => pieceToChar(p)).join(" ");
+          captureSound.play();
+        } else {
+          blackCaptured.push(move.captured);
+          whiteCapturedEl.innerHTML = blackCaptured.map(p => pieceToChar(p)).join(" ");
+          captureSound.play();
+        }
+      } else {
+        moveSound.play();
+      }
+
+      active = game.turn();
+      updateClocks();
+      startClock();
+
+      saveGame();
+    }
+
+    function pieceToChar(p) {
+      const map = { p: "♟", r: "♜", n: "♞", b: "♝", q: "♛", k: "♚" };
+      return map[p] || p;
+    }
+
+    function endGame(msg) {
+      clearInterval(timer);
+      alert(msg);
+    }
+
+    // Save & load
+    function saveGame() {
+      localStorage.setItem("chessGame", JSON.stringify({
+        fen: game.fen(),
+        whiteTime, blackTime,
+        whiteCaptured, blackCaptured
+      }));
+    }
+
+    function loadGame() {
+      let data = JSON.parse(localStorage.getItem("chessGame"));
+      if (!data) return;
+      game = new Chess(data.fen);
+      board.position(data.fen);
+      whiteTime = data.whiteTime;
+      blackTime = data.blackTime;
+      whiteCaptured = data.whiteCaptured;
+      blackCaptured = data.blackCaptured;
+      whiteCapturedEl.innerHTML = blackCaptured.map(p => pieceToChar(p)).join(" ");
+      blackCapturedEl.innerHTML = whiteCaptured.map(p => pieceToChar(p)).join(" ");
+      updateClocks();
+    }
+
+    loadGame();
+    startClock();
+
+    // Chat
+    chatInput.addEventListener("keypress", e => {
+      if (e.key === "Enter" && chatInput.value.trim()) {
+        let msg = chatInput.value.trim();
+        let div = document.createElement("div");
+        div.textContent = "You: " + msg;
+        chatMessages.appendChild(div);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        chatInput.value = "";
+      }
+    });
+
+    // Reset
+    document.getElementById("resetBtn").onclick = () => {
+      game.reset();
+      board.start();
+      whiteTime = 600;
+      blackTime = 600;
+      whiteCaptured = [];
+      blackCaptured = [];
+      whiteCapturedEl.innerHTML = "";
+      blackCapturedEl.innerHTML = "";
+      active = "w";
+      updateClocks();
+      startClock();
+      saveGame();
+    };
+
+    // PGN Export
+    document.getElementById("exportBtn").onclick = () => {
+      alert(game.pgn());
+    };
+  </script>
+</body>
+    </html>

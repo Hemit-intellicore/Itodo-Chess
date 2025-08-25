@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPS Image Tagger (Offline Ready)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h2 {
+      margin-bottom: 10px;
+    }
+
+    .form-section {
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      margin-bottom: 20px;
+      width: 320px;
+    }
+
+    label {
+      font-size: 14px;
+      display: block;
+      margin: 8px 0 4px;
+    }
+
+    input {
+      width: 100%;
+      padding: 6px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    button {
+      margin-top: 12px;
+      width: 100%;
+      padding: 10px;
+      border: none;
+      background: #2563eb;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    canvas {
+      margin-top: 20px;
+      border: 1px solid #ccc;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <h2>GPS Image Tagger</h2>
+
+  <div class="form-section">
+    <label>Upload Base Image:</label>
+    <input type="file" id="imageUpload" accept="image/*">
+
+    <label>Location:</label>
+    <input type="text" id="location" placeholder="Zaki Biam, Benue, Nigeria">
+
+    <label>Coordinates:</label>
+    <input type="text" id="coordinates" placeholder="7.506292,9.611338">
+
+    <label>Date & Time:</label>
+    <input type="text" id="dateTime" placeholder="25/08/2025 12:30 PM GMT +01:00">
+
+    <button onclick="generateImage()">Generate Tagged Image</button>
+  </div>
+
+  <canvas id="canvas"></canvas>
+  <button onclick="downloadImage()">Download Image</button>
+
+  <script>
+    let uploadedImage;
+    let mapThumbnail;
+
+    // Load placeholder map (offline use)
+    const placeholderMap = new Image();
+    placeholderMap.src =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAABHNCSVQICAgIfAhkiAAAA..."; 
+    // (Base64 of a small "map style" image – replace with any static image you prefer)
+
+    document.getElementById("imageUpload").addEventListener("change", function (e) {
+      const reader = new FileReader();
+      reader.onload = function (event) {
+        uploadedImage = new Image();
+        uploadedImage.onload = function () {
+          drawCanvas();
+        };
+        uploadedImage.src = event.target.result;
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    });
+
+    function drawCanvas() {
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+
+      if (!uploadedImage) return;
+
+      // Resize canvas to match uploaded image
+      canvas.width = uploadedImage.width;
+      canvas.height = uploadedImage.height;
+
+      // Draw uploaded image
+      ctx.drawImage(uploadedImage, 0, 0);
+
+      // Overlay area
+      const overlayHeight = 140;
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(0, canvas.height - overlayHeight, canvas.width, overlayHeight);
+
+      // Inputs
+      const location = document.getElementById("location").value;
+      const coordinates = document.getElementById("coordinates").value;
+      const dateTime = document.getElementById("dateTime").value;
+
+      // Draw placeholder map thumbnail
+      ctx.drawImage(placeholderMap, 10, canvas.height - overlayHeight + 10, 100, 100);
+
+      // Texts
+      ctx.fillStyle = "white";
+      ctx.font = "16px Arial";
+      ctx.fillText(location, 120, canvas.height - 100);
+      ctx.fillText("Lat/Long: " + coordinates, 120, canvas.height - 75);
+      ctx.fillText(dateTime, 120, canvas.height - 50);
+    }
+
+    function generateImage() {
+      drawCanvas();
+    }
+
+    function downloadImage() {
+      const canvas = document.getElementById("canvas");
+      const link = document.createElement("a");
+      link.download = "tagged-image.png";
+      link.href = canvas.toDataURL();
+      link.click();
+    }
+  </script>
+</body>
+</html>
